@@ -54,15 +54,7 @@ class GoTermClassifier:
 
     @torch.no_grad()
     def predict_terms(self, sequence: str, top_p: float = 0.5) -> dict[str, float]:
-        """
-        Get the GO term probabilities for a given protein sequence.
-
-        Args:
-            sequence: The protein sequence to classify.
-
-        Returns:
-            Dictionary with the results.
-        """
+        """Get the GO term probabilities for a given protein sequence."""
 
         out = self.tokenizer(
             sequence,
@@ -79,15 +71,7 @@ class GoTermClassifier:
     def predict_subgraph(
         self, sequence: str, top_p: float = 0.5
     ) -> tuple[DiGraph, dict[str, float]]:
-        """
-        Get the GO subgraph for a given protein sequence.
-
-        Args:
-            sequence: The protein sequence to classify.
-
-        Returns:
-            Dictionary with the results.
-        """
+        """Get the GO subgraph for a given protein sequence."""
 
         out = self.tokenizer(
             sequence,

@@ -23,7 +23,7 @@ device = environ.get("DEVICE", "cpu")
 app = FastAPI(
     title="ESMC GO Inference Server",
     description="Inference server for protein gene ontology (GO) classification using the EMC Cambrian family of models.",
-    version="0.0.4",
+    version="0.0.3",
 )
 
 graph = obonet.read_obo(go_db_path)
@@ -50,10 +50,10 @@ app.add_middleware(
 if api_token:
     app.add_middleware(TokenAuthentication, api_token=api_token)
 
-app.add_middleware(ResponseTime)
-
 app.include_router(go_classifier.router)
 app.include_router(health.router)
+
+app.add_middleware(ResponseTime)
 
 
 if __name__ == "__main__":
