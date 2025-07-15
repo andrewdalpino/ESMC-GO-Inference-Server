@@ -5,6 +5,7 @@ from fastapi import APIRouter, Request
 
 import networkx as nx
 
+
 class PredictTermsRequest(BaseModel):
     sequence: str = Field(min_length=1, description="A protein sequence to classify.")
 
@@ -13,6 +14,7 @@ class PredictTermsResponse(BaseModel):
     probabilities: dict[str, float] = Field(
         description="List of GO terms and their probabilities."
     )
+
 
 class PredictSubgraphRequest(BaseModel):
     sequence: str = Field(min_length=1, description="A protein sequence to classify.")
@@ -23,6 +25,7 @@ class PredictSubgraphRequest(BaseModel):
         le=1.0,
         description="The minimum probability threshold for GO terms to be included in the subgraph.",
     )
+
 
 class PredictSubgraphResponse(BaseModel):
     class Config:
@@ -39,25 +42,27 @@ class PredictSubgraphResponse(BaseModel):
 
 router = APIRouter(prefix="/model")
 
+
 @router.post("/gene-ontology/terms")
 async def predict_terms(request: Request, input: PredictTermsRequest):
     """Return the GO term probabilities for a protein sequence."""
 
-    result = request.app.state.model.predict_terms(input.sequence)
+    go_term_probabilities = request.app.state.model.predict_terms(input.sequence)
 
-    return PredictTermsResponse(
-        probabilities=result["probabilities"],
-    )
+    return PredictTermsResponse(probabilities=go_term_probabilities)
+
 
 @router.post("/gene-ontology/subgraph")
 async def predict_subgraph(request: Request, input: PredictSubgraphRequest):
     """Return the GO subgraph for a protein sequence."""
 
-    result = request.app.state.model.predict_subgraph(input.sequence, input.top_p)
+    subgraph, go_term_probabilities = request.app.state.model.predict_subgraph(
+        input.sequence, input.top_p
+    )
 
-    subgraph_json = nx.node_link_data(result["subgraph"], edges="edges")
+    subgraph_json = nx.node_link_data(subgraph, edges="edges")
 
     return PredictSubgraphResponse(
         subgraph=subgraph_json,
-        probabilities=result["probabilities"],
+        probabilities=go_term_probabilities,
     )

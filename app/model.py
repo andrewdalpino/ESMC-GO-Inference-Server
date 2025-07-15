@@ -1,9 +1,3 @@
-from copy import copy
-
-from collections import defaultdict
-
-from typing import Any
-
 import torch
 
 from esm.tokenization import EsmSequenceTokenizer
@@ -51,14 +45,15 @@ class GoTermClassifier:
 
         model.eval()
 
+        model.load_gene_ontology(graph)
+
         self.tokenizer = tokenizer
-        self.graph = graph
         self.model = model
         self.context_length = context_length
         self.device = device
 
     @torch.no_grad()
-    def predict_terms(self, sequence: str, top_p: float = 0.5) -> dict[str, Any]:
+    def predict_terms(self, sequence: str, top_p: float = 0.5) -> dict[str, float]:
         """
         Get the GO term probabilities for a given protein sequence.
 
@@ -75,27 +70,15 @@ class GoTermClassifier:
             truncation=True,
         )
 
-        input_ids = out["input_ids"]
+        input_ids = torch.tensor(out["input_ids"], dtype=torch.int64).to(self.device)
 
-        input_ids = (
-            torch.tensor(input_ids, dtype=torch.int64).unsqueeze(0).to(self.device)
-        )
+        go_term_probabilities = self.model.predict_terms(input_ids, top_p)
 
-        y_pred = self.model.forward(input_ids)
+        return go_term_probabilities
 
-        y_prob = torch.sigmoid(y_pred).squeeze(0).tolist()
-
-        probabilities = {
-            self.model.id2label[str(index)]: probability
-            for index, probability in enumerate(y_prob)
-            if probability > top_p
-        }
-
-        return {
-            "probabilities": probabilities,
-        }
-
-    def predict_subgraph(self, sequence: str, top_p: float = 0.5):
+    def predict_subgraph(
+        self, sequence: str, top_p: float = 0.5
+    ) -> tuple[DiGraph, dict[str, float]]:
         """
         Get the GO subgraph for a given protein sequence.
 
@@ -106,23 +89,14 @@ class GoTermClassifier:
             Dictionary with the results.
         """
 
-        out = self.predict_terms(sequence, top_p)
+        out = self.tokenizer(
+            sequence,
+            max_length=self.context_length,
+            truncation=True,
+        )
 
-        probabilities = defaultdict(float, out["probabilities"])
+        input_ids = torch.tensor(out["input_ids"], dtype=torch.int64).to(self.device)
 
-        # Fix up the predictions by leveraging the GO DAG hierarchy.
-        for go_term, parent_probability in copy(probabilities).items():
-            for descendant in nx.descendants(self.graph, go_term):
-                child_probability = probabilities[descendant]
+        subgraph, go_term_probabilities = self.model.predict_subgraph(input_ids, top_p)
 
-                probabilities[descendant] = max(
-                    parent_probability,
-                    child_probability,
-                )
-
-        subgraph = self.graph.subgraph(probabilities.keys())
-
-        return {
-            "subgraph": subgraph,
-            "probabilities": probabilities,
-        }
+        return subgraph, go_term_probabilities
