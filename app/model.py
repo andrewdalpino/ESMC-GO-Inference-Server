@@ -16,7 +16,12 @@ class GoTermClassifier:
     }
 
     def __init__(
-        self, model_name: str, graph: DiGraph, context_length: int, device: str
+        self,
+        model_name: str,
+        graph: DiGraph,
+        context_length: int,
+        device: str,
+        dtype: torch.dtype,
     ):
         """
         Args:
@@ -41,7 +46,9 @@ class GoTermClassifier:
 
         tokenizer = EsmSequenceTokenizer()
 
-        model = EsmcGoTermClassifier.from_pretrained(model_name).to(device)
+        model = EsmcGoTermClassifier.from_pretrained(model_name)
+
+        model = model.to(device=device, dtype=dtype)
 
         model.eval()
 
