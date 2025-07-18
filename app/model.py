@@ -1,5 +1,7 @@
 import torch
 
+from torchao.quantization import Int8WeightOnlyConfig, quantize_
+
 from esm.tokenization import EsmSequenceTokenizer
 
 from esmc_function_classifier.model import EsmcGoTermClassifier
@@ -20,8 +22,8 @@ class GoTermClassifier:
         model_name: str,
         graph: DiGraph,
         context_length: int,
+        quantize: bool,
         device: str,
-        dtype: torch.dtype,
     ):
         """
         Args:
@@ -48,7 +50,10 @@ class GoTermClassifier:
 
         model = EsmcGoTermClassifier.from_pretrained(model_name)
 
-        model = model.to(device=device, dtype=dtype)
+        if quantize:
+            quantize_(model, Int8WeightOnlyConfig())
+
+        model = model.to(device)
 
         model.eval()
 
