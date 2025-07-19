@@ -8,8 +8,6 @@ from esmc_function_classifier.model import EsmcGoTermClassifier
 
 from networkx import DiGraph
 
-import networkx as nx
-
 
 class GoTermClassifier:
     AVAILABLE_MODELS = {
@@ -38,17 +36,14 @@ class GoTermClassifier:
                 f"Available models: {self.AVAILABLE_MODELS}"
             )
 
-        if not nx.is_directed_acyclic_graph(graph):
-            raise ValueError(
-                "The provided gene ontology must be a directed acyclic graph (DAG)."
-            )
-
         if context_length <= 0:
             raise ValueError("Context length must be greater than 0.")
 
         tokenizer = EsmSequenceTokenizer()
 
         model = EsmcGoTermClassifier.from_pretrained(model_name)
+
+        model = torch.compile(model)
 
         if quantize:
             quantize_(model, Int8WeightOnlyConfig())
