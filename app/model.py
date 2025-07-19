@@ -71,9 +71,9 @@ class GoTermClassifier:
 
         input_ids = torch.tensor(out["input_ids"], dtype=torch.int64).to(self.device)
 
-        go_term_probabilities = self.model.predict_terms(input_ids, top_p)
+        probabilities = self.model.predict_terms(input_ids, top_p)
 
-        return go_term_probabilities
+        return probabilities
 
     def predict_subgraph(
         self, sequence: str, top_p: float = 0.5
@@ -88,6 +88,6 @@ class GoTermClassifier:
 
         input_ids = torch.tensor(out["input_ids"], dtype=torch.int64).to(self.device)
 
-        subgraph, go_term_probabilities = self.model.predict_subgraph(input_ids, top_p)
+        subgraph, probabilities = self.model.predict_subgraph(input_ids, top_p)
 
-        return subgraph, go_term_probabilities
+        return subgraph, probabilities
