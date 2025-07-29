@@ -19,12 +19,13 @@ model_name = environ.get("MODEL_NAME", "andrewdalpino/ESMC-300M-Protein-Function
 go_db_path = environ.get("GO_DB_PATH", "./dataset/go-basic.obo")
 context_length = int(environ.get("CONTEXT_LENGTH", 2048))
 quantize = environ.get("QUANTIZE", "false").lower() == "true"
+quant_group_size = int(environ.get("QUANT_GROUP_SIZE", 64))
 device = environ.get("DEVICE", "cpu")
 
 app = FastAPI(
     title="ESMC GO Inference Server",
     description="Inference server for protein gene ontology (GO) classification using the EMC Cambrian family of models.",
-    version="0.0.7",
+    version="0.0.8",
 )
 
 graph = obonet.read_obo(go_db_path)
@@ -34,6 +35,7 @@ model = GoTermClassifier(
     graph=graph,
     context_length=context_length,
     quantize=quantize,
+    quant_group_size=quant_group_size,
     device=device,
 )
 

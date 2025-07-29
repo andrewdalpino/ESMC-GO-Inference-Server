@@ -1,7 +1,5 @@
 import torch
 
-from torchao.quantization import Int8WeightOnlyConfig, quantize_
-
 from esm.tokenization import EsmSequenceTokenizer
 
 from esmc_function_classifier.model import EsmcGoTermClassifier
@@ -12,7 +10,9 @@ from networkx import DiGraph
 class GoTermClassifier:
     AVAILABLE_MODELS = {
         "andrewdalpino/ESMC-300M-Protein-Function",
+        "andrewdalpino/ESMC-300M-QAT-Protein-Function",
         "andrewdalpino/ESMC-600M-Protein-Function",
+        "andrewdalpino/ESMC-600M-QAT-Protein-Function",
     }
 
     def __init__(
@@ -21,6 +21,7 @@ class GoTermClassifier:
         graph: DiGraph,
         context_length: int,
         quantize: bool,
+        quant_group_size: int,
         device: str,
     ):
         """
@@ -46,7 +47,7 @@ class GoTermClassifier:
         model = torch.compile(model)
 
         if quantize:
-            quantize_(model, Int8WeightOnlyConfig())
+            model.quantize_weights(group_size=quant_group_size)
 
         model = model.to(device)
 
