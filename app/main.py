@@ -31,7 +31,7 @@ app = FastAPI(
 graph = obonet.read_obo(go_db_path)
 
 model = GoTermClassifier(
-    model_name=model_name,
+    name=model_name,
     graph=graph,
     context_length=context_length,
     quantize=quantize,
