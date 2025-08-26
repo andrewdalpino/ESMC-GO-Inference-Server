@@ -1,5 +1,7 @@
 import torch
 
+from torch.cuda import is_available as cuda_is_available, is_bf16_supported
+
 from esm.tokenization import EsmSequenceTokenizer
 
 from esmc_function_classifier.model import EsmcGoTermClassifier
@@ -17,7 +19,7 @@ class GoTermClassifier:
 
     def __init__(
         self,
-        model_name: str,
+        name: str,
         graph: DiGraph,
         context_length: int,
         quantize: bool,
@@ -26,34 +28,46 @@ class GoTermClassifier:
     ):
         """
         Args:
-            model_name: HuggingFace model identifier for the ESMC model.
+            name: HuggingFace model identifier for the ESMC model.
+            graph: A NetworkX DiGraph representing the Gene Ontology DAG.
             context_length: Maximum length of the input sequence.
+            quantize: Whether to quantize the model weights.
+            quant_group_size: Group size for quantization.
             device: Device to run the model on (e.g., "cuda" or "cpu").
         """
 
-        if model_name not in self.AVAILABLE_MODELS:
+        if name not in self.AVAILABLE_MODELS:
             raise ValueError(
-                f"Model {model_name} is not available. "
+                f"Model {name} is not available. "
                 f"Available models: {self.AVAILABLE_MODELS}"
             )
 
         if context_length <= 0:
             raise ValueError("Context length must be greater than 0.")
 
+        if "cuda" in device and not cuda_is_available():
+            raise ValueError("CUDA is not supported on this device.")
+
         tokenizer = EsmSequenceTokenizer()
 
-        model = EsmcGoTermClassifier.from_pretrained(model_name)
+        model = EsmcGoTermClassifier.from_pretrained(name)
+
+        dtype = (
+            torch.bfloat16
+            if "cuda" in device and is_bf16_supported()
+            else torch.float16
+        )
+
+        model = model.to(device, dtype=dtype)
 
         model = torch.compile(model)
 
         if quantize:
             model.quantize_weights(group_size=quant_group_size)
 
-        model = model.to(device)
+        model.load_gene_ontology(graph)
 
         model.eval()
-
-        model.load_gene_ontology(graph)
 
         self.tokenizer = tokenizer
         self.model = model
@@ -76,6 +90,7 @@ class GoTermClassifier:
 
         return probabilities
 
+    @torch.no_grad()
     def predict_subgraph(
         self, sequence: str, top_p: float = 0.5
     ) -> tuple[DiGraph, dict[str, float]]:
