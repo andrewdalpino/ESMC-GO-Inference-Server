@@ -15,13 +15,21 @@ from model import GoTermClassifier
 
 import uvicorn
 
+TITLE = "ESMC GO Inference Server"
+
+DESCRIPTION = (
+    "Server for protein gene ontology (GO) inference using the ESMC family of models."
+)
+
+VERSION = "0.0.10"
+
 
 api_token = environ.get("API_TOKEN", "")
 model_name = environ.get("MODEL_NAME", "andrewdalpino/ESMC-300M-Protein-Function")
 go_db_path = environ.get("GO_DB_PATH", "./dataset/go-basic.obo")
 context_length = int(environ.get("CONTEXT_LENGTH", 2048))
-device = environ.get("DEVICE", "cpu")
-quantize = environ.get("QUANTIZE", "false").lower() == "true"
+device = environ.get("DEVICE", "cuda")
+quantize = environ.get("QUANTIZE", "true").lower() == "true"
 max_concurrency = int(environ.get("MAX_CONCURRENCY", "1"))
 
 
@@ -44,9 +52,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="ESMC GO Inference Server",
-    description="Inference server for protein gene ontology (GO) classification using the ESMC family of models.",
-    version="0.0.10",
+    title=TITLE,
+    description=DESCRIPTION,
+    version=VERSION,
     lifespan=lifespan,
 )
 

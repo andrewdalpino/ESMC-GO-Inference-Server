@@ -85,10 +85,19 @@ class GoTermClassifier:
         limiter = Semaphore(max_concurrency)
 
         self.tokenizer = tokenizer
+        self.name = name
         self.model = model
         self.context_length = context_length
         self.device = device
+        self.quantize = quantize
+        self.max_concurrency = max_concurrency
         self.limiter = limiter
+
+    @property
+    def num_parameters(self) -> int:
+        """Return the number of parameters in the model."""
+
+        return self.model.num_params
 
     @torch.inference_mode()
     def predict_terms(self, sequence: str, top_p: float) -> dict[str, float]:
@@ -100,10 +109,10 @@ class GoTermClassifier:
             truncation=True,
         )
 
+        input_ids = torch.tensor(out["input_ids"], dtype=torch.int64)
+
         with self.limiter:
-            input_ids = torch.tensor(out["input_ids"], dtype=torch.int64).to(
-                self.device
-            )
+            input_ids = input_ids.to(self.device)
 
             probabilities = self.model.predict_terms(input_ids, top_p)
 
@@ -121,10 +130,10 @@ class GoTermClassifier:
             truncation=True,
         )
 
+        input_ids = torch.tensor(out["input_ids"], dtype=torch.int64)
+
         with self.limiter:
-            input_ids = torch.tensor(out["input_ids"], dtype=torch.int64).to(
-                self.device
-            )
+            input_ids = input_ids.to(self.device)
 
             subgraph, probabilities = self.model.predict_subgraph(input_ids, top_p)
 
