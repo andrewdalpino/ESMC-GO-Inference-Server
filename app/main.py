@@ -19,7 +19,7 @@ TITLE = "ESMC GO Inference Server"
 
 DESCRIPTION = "Inference server for the ESMC Protein Function family of models."
 
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 
 
 api_token = environ.get("API_TOKEN", "")
