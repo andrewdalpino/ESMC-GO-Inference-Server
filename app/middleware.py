@@ -1,4 +1,5 @@
 import logging
+import traceback
 
 from time import time
 
@@ -22,7 +23,9 @@ class ExceptionHandler(BaseHTTPMiddleware):
                 content={"message": e.detail}, status_code=e.status_code
             )
         except Exception as e:
-            logging.error(f"Server error: {e}")
+            stack_trace = traceback.format_exc()
+
+            logging.error(f"Server error: {e}\n{stack_trace}")
 
             return JSONResponse(
                 content={"message": "Something went wrong."}, status_code=500

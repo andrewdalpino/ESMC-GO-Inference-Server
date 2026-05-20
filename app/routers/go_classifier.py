@@ -1,5 +1,4 @@
 from pydantic import BaseModel, Field
-from typing import Any
 
 from fastapi import APIRouter, Request
 
@@ -27,13 +26,19 @@ class ModelInfoResponse(BaseModel):
         description="Whether the model weights are quantized to Int8.",
     )
 
+    quant_group_size: int = Field(
+        description="The group size used for quantization.",
+    )
+
     max_concurrency: int = Field(
         description="The maximum number of concurrent generations.",
     )
 
 
 class PredictTermsRequest(BaseModel):
-    sequence: str = Field(min_length=1, description="A protein amino acid sequence.")
+    sequences: list[str] = Field(
+        min_length=1, description="A list of protein amino acid sequences."
+    )
 
     top_p: float = Field(
         default=0.5,
@@ -43,14 +48,58 @@ class PredictTermsRequest(BaseModel):
     )
 
 
+class PredictMfTermsRequest(PredictTermsRequest):
+    pass
+
+
+class PredictBpTermsRequest(PredictTermsRequest):
+    pass
+
+
+class PredictCcTermsRequest(PredictTermsRequest):
+    pass
+
+
+class PredictAllTermsRequest(PredictTermsRequest):
+    pass
+
+
 class PredictTermsResponse(BaseModel):
-    probabilities: dict[str, float] = Field(
+    terms: list[list[dict[str, float]]] = Field(
         description="List of GO terms and their probabilities."
     )
 
 
-class PredictSubgraphRequest(BaseModel):
-    sequence: str = Field(min_length=1, description="A protein amino acid sequence.")
+class PredictMfTermsResponse(PredictTermsResponse):
+    pass
+
+
+class PredictBpTermsResponse(PredictTermsResponse):
+    pass
+
+
+class PredictCcTermsResponse(PredictTermsResponse):
+    pass
+
+
+class PredictAllTermsResponse(BaseModel):
+    mf_terms: list[list[dict[str, float]]] = Field(
+        description="List of MF GO terms and their probabilities."
+    )
+
+    bp_terms: list[list[dict[str, float]]] = Field(
+        description="List of BP GO terms and their probabilities."
+    )
+
+    cc_terms: list[list[dict[str, float]]] = Field(
+        description="List of CC GO terms and their probabilities."
+    )
+
+
+class PredictSubgraphsRequest(BaseModel):
+    sequences: list[str] = Field(
+        min_length=1, description="A list of protein amino acid sequences."
+    )
 
     top_p: float = Field(
         default=0.5,
@@ -60,13 +109,67 @@ class PredictSubgraphRequest(BaseModel):
     )
 
 
-class PredictSubgraphResponse(BaseModel):
-    subgraph: dict = Field(
+class PredictMfSubgraphsRequest(PredictSubgraphsRequest):
+    pass
+
+
+class PredictBpSubgraphsRequest(PredictSubgraphsRequest):
+    pass
+
+
+class PredictCcSubgraphsRequest(PredictSubgraphsRequest):
+    pass
+
+
+class PredictAllSubgraphsRequest(PredictSubgraphsRequest):
+    pass
+
+
+class PredictSubgraphsResponse(BaseModel):
+    subgraphs: list[dict] = Field(
         description="A subgraph of the gene ontology in node-link format."
     )
 
-    probabilities: dict[str, float] = Field(
+    terms: list[dict[str, float]] = Field(
         description="List of predicted GO terms and their probabilities."
+    )
+
+
+class PredictMfSubgraphsResponse(PredictSubgraphsResponse):
+    pass
+
+
+class PredictBpSubgraphsResponse(PredictSubgraphsResponse):
+    pass
+
+
+class PredictCcSubgraphsResponse(PredictSubgraphsResponse):
+    pass
+
+
+class PredictAllSubgraphsResponse(BaseModel):
+    mf_subgraphs: list[dict] = Field(
+        description="A list of subgraphs of the gene ontology in node-link format."
+    )
+
+    mf_terms: list[dict[str, float]] = Field(
+        description="List of MF GO terms and their probabilities."
+    )
+
+    bp_subgraphs: list[dict] = Field(
+        description="A list of subgraphs of the gene ontology in node-link format."
+    )
+
+    bp_terms: list[dict[str, float]] = Field(
+        description="List of BP GO terms and their probabilities."
+    )
+
+    cc_subgraphs: list[dict] = Field(
+        description="A list of subgraphs of the gene ontology in node-link format."
+    )
+
+    cc_terms: list[dict[str, float]] = Field(
+        description="List of CC GO terms and their probabilities."
     )
 
 
@@ -83,32 +186,121 @@ def model_info(request: Request) -> ModelInfoResponse:
         context_length=model.context_length,
         device=model.device,
         quantize=model.quantize,
+        quant_group_size=model.quant_group_size,
         max_concurrency=model.max_concurrency,
     )
 
 
-@router.post("/gene-ontology/terms")
-async def predict_terms(request: Request, input: PredictTermsRequest):
-    """Return the GO term probabilities for a protein sequence."""
+@router.post("/gene-ontology/aspects/mf/terms", response_model=PredictMfTermsResponse)
+async def predict_mf_terms(request: Request, input: PredictMfTermsRequest):
+    """Return all the GO term probabilities for a protein sequence."""
 
-    go_term_probabilities = request.app.state.model.predict_terms(
-        input.sequence, input.top_p
+    terms = request.app.state.model.predict_mf_terms(input.sequences, input.top_p)
+
+    return PredictMfTermsResponse(terms=terms)
+
+
+@router.post("/gene-ontology/aspects/bp/terms", response_model=PredictBpTermsResponse)
+async def predict_bp_terms(request: Request, input: PredictBpTermsRequest):
+    """Return all the GO term probabilities for a protein sequence."""
+
+    terms = request.app.state.model.predict_bp_terms(input.sequences, input.top_p)
+
+    return PredictBpTermsResponse(terms=terms)
+
+
+@router.post("/gene-ontology/aspects/cc/terms", response_model=PredictCcTermsResponse)
+async def predict_cc_terms(request: Request, input: PredictCcTermsRequest):
+    """Return all the GO term probabilities for a protein sequence."""
+
+    terms = request.app.state.model.predict_cc_terms(input.sequences, input.top_p)
+
+    return PredictCcTermsResponse(terms=terms)
+
+
+@router.post("/gene-ontology/aspects/all/terms", response_model=PredictAllTermsResponse)
+async def predict_all_terms(request: Request, input: PredictAllTermsRequest):
+    """Return all the GO term probabilities for a protein sequence."""
+
+    mf_terms, bp_terms, cc_terms = request.app.state.model.predict_all_terms(
+        input.sequences, input.top_p
     )
 
-    return PredictTermsResponse(probabilities=go_term_probabilities)
-
-
-@router.post("/gene-ontology/subgraph")
-async def predict_subgraph(request: Request, input: PredictSubgraphRequest):
-    """Return the GO subgraph for a protein sequence."""
-
-    subgraph, go_term_probabilities = request.app.state.model.predict_subgraph(
-        input.sequence, input.top_p
+    return PredictAllTermsResponse(
+        mf_terms=mf_terms, bp_terms=bp_terms, cc_terms=cc_terms
     )
 
-    subgraph = nx.node_link_data(subgraph, edges="edges")
 
-    return PredictSubgraphResponse(
-        subgraph=subgraph,
-        probabilities=go_term_probabilities,
+@router.post(
+    "/gene-ontology/aspects/mf/subgraphs", response_model=PredictMfSubgraphsResponse
+)
+async def predict_mf_subgraphs(request: Request, input: PredictMfSubgraphsRequest):
+    """Return all the GO MF subgraphs for a protein sequence."""
+
+    subgraphs, terms = request.app.state.model.predict_mf_subgraphs(
+        input.sequences, input.top_p
+    )
+
+    subgraph_jsons = [
+        nx.node_link_data(subgraph, edges="edges") for subgraph in subgraphs
+    ]
+
+    return PredictMfSubgraphsResponse(subgraphs=subgraph_jsons, terms=terms)
+
+
+@router.post(
+    "/gene-ontology/aspects/bp/subgraphs", response_model=PredictBpSubgraphsResponse
+)
+async def predict_bp_subgraphs(request: Request, input: PredictBpSubgraphsRequest):
+    """Return all the GO BP subgraphs for a protein sequence."""
+
+    subgraphs, terms = request.app.state.model.predict_bp_subgraphs(
+        input.sequences, input.top_p
+    )
+
+    subgraph_jsons = [nx.node_link_data(subgraph) for subgraph in subgraphs]
+
+    return PredictBpSubgraphsResponse(subgraphs=subgraph_jsons, terms=terms)
+
+
+@router.post(
+    "/gene-ontology/aspects/cc/subgraphs", response_model=PredictCcSubgraphsResponse
+)
+async def predict_cc_subgraphs(request: Request, input: PredictCcSubgraphsRequest):
+    """Return all the GO CC subgraphs for a protein sequence."""
+
+    subgraphs, terms = request.app.state.model.predict_cc_subgraphs(
+        input.sequences, input.top_p
+    )
+
+    subgraph_jsons = [nx.node_link_data(subgraph) for subgraph in subgraphs]
+
+    return PredictCcSubgraphsResponse(subgraphs=subgraph_jsons, terms=terms)
+
+
+@router.post(
+    "/gene-ontology/aspects/all/subgraphs", response_model=PredictAllSubgraphsResponse
+)
+async def predict_all_subgraphs(request: Request, input: PredictAllSubgraphsRequest):
+    """Return all the GO subgraphs for a protein sequence."""
+
+    mf_results, bp_results, cc_results = request.app.state.model.predict_all_subgraphs(
+        input.sequences, input.top_p
+    )
+
+    mf_subgraphs, mf_terms = mf_results
+    bp_subgraphs, bp_terms = bp_results
+    cc_subgraphs, cc_terms = cc_results
+
+    mf_subgraph_jsons = [nx.node_link_data(subgraph) for subgraph in mf_subgraphs]
+    bp_subgraph_jsons = [nx.node_link_data(subgraph) for subgraph in bp_subgraphs]
+    cc_subgraph_jsons = [nx.node_link_data(subgraph) for subgraph in cc_subgraphs]
+
+    return PredictAllSubgraphsResponse(
+        mf_subgraphs=mf_subgraph_jsons,
+        bp_subgraphs=bp_subgraph_jsons,
+        cc_subgraphs=cc_subgraph_jsons,
+        mf_terms=mf_terms,
+        bp_terms=bp_terms,
+        cc_terms=cc_terms,
     )

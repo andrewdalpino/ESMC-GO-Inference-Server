@@ -1,13 +1,11 @@
+from functools import partial
+
 import torch
 
 from torch.cuda import is_available as cuda_is_available, is_bf16_supported
 from torch.backends.mps import is_available as mps_is_available
 
-from torchao.quantization import Int8WeightOnlyConfig, quantize_
-
-from esm.tokenization import EsmSequenceTokenizer
-
-from esmc_function_classifier.model import EsmcGoTermClassifier
+from esmc_protein_function.model import ESMCProteinFunction
 
 from networkx import DiGraph
 
@@ -16,10 +14,8 @@ from threading import Semaphore
 
 class GoTermClassifier:
     AVAILABLE_MODELS = {
-        "andrewdalpino/ESMC-300M-Protein-Function",
-        "andrewdalpino/ESMC-300M-QAT-Protein-Function",
-        "andrewdalpino/ESMC-600M-Protein-Function",
-        "andrewdalpino/ESMC-600M-QAT-Protein-Function",
+        "andrewdalpino/ESMC-Protein-Function-V1-300M",
+        "andrewdalpino/ESMC-Protein-Function-V1-600M",
     }
 
     def __init__(
@@ -29,15 +25,17 @@ class GoTermClassifier:
         context_length: int,
         device: str,
         quantize: bool,
+        quant_group_size: int,
         max_concurrency: int,
     ):
         """
         Args:
-            name: HuggingFace model identifier for the ESMC model.
+            name: HuggingFace model identifier for the model.
             graph: A NetworkX DiGraph representing the Gene Ontology DAG.
             context_length: Maximum length of the input sequence.
             device: Device to run the model on (e.g., "cuda" or "cpu").
             quantize: Whether to quantize the model weights.
+            quant_group_size: Group size for quantization.
             max_concurrency: Maximum number of concurrent inferences.
         """
 
@@ -59,22 +57,18 @@ class GoTermClassifier:
         if max_concurrency < 1:
             raise ValueError("Max concurrency must be greater than 0.")
 
-        tokenizer = EsmSequenceTokenizer()
-
-        model = EsmcGoTermClassifier.from_pretrained(name)
-
-        dtype = (
-            torch.bfloat16
-            if "cuda" in device and is_bf16_supported()
-            else torch.float16
-        )
-
-        model = model.to(dtype=dtype)
-
-        model = torch.compile(model)
+        model = ESMCProteinFunction.from_pretrained(name)
 
         if quantize:
-            quantize_(model, Int8WeightOnlyConfig())
+            model.quantize_weights(quant_group_size)
+        else:
+            dtype = (
+                torch.bfloat16
+                if "cuda" in device and is_bf16_supported()
+                else torch.float16
+            )
+
+            model = model.to(dtype=dtype)
 
         model = model.to(device)
 
@@ -84,14 +78,22 @@ class GoTermClassifier:
 
         limiter = Semaphore(max_concurrency)
 
-        self.tokenizer = tokenizer
+        tokenize = partial(
+            model.tokenizer,
+            max_length=context_length,
+            padding=True,
+            truncation=True,
+        )
+
         self.name = name
         self.model = model
         self.context_length = context_length
         self.device = device
         self.quantize = quantize
+        self.quant_group_size = quant_group_size
         self.max_concurrency = max_concurrency
         self.limiter = limiter
+        self.tokenize = tokenize
 
     @property
     def num_parameters(self) -> int:
@@ -99,42 +101,134 @@ class GoTermClassifier:
 
         return self.model.num_params
 
-    @torch.inference_mode()
-    def predict_terms(self, sequence: str, top_p: float) -> dict[str, float]:
-        """Get the GO term probabilities for a given protein sequence."""
+    def predict_mf_terms(
+        self, sequences: list[str], top_p: float
+    ) -> list[dict[str, float]]:
+        """Predict the MF GO term probabilities for a given protein sequence."""
 
-        out = self.tokenizer(
-            sequence,
-            max_length=self.context_length,
-            truncation=True,
-        )
+        out = self.tokenize(sequences)
 
-        input_ids = torch.tensor(out["input_ids"], dtype=torch.int64)
+        input_ids = torch.tensor(out["input_ids"], dtype=torch.int32)
 
         with self.limiter:
             input_ids = input_ids.to(self.device)
 
-            probabilities = self.model.predict_terms(input_ids, top_p)
+            terms = self.model.predict_mf_terms(input_ids, top_p)
 
-        return probabilities
+        return terms
 
-    @torch.inference_mode()
-    def predict_subgraph(
-        self, sequence: str, top_p: float
-    ) -> tuple[DiGraph, dict[str, float]]:
-        """Get the GO subgraph for a given protein sequence."""
+    def predict_bp_terms(
+        self, sequences: list[str], top_p: float
+    ) -> list[dict[str, float]]:
+        """Predict the BP GO term probabilities for a given protein sequence."""
 
-        out = self.tokenizer(
-            sequence,
-            max_length=self.context_length,
-            truncation=True,
-        )
+        out = self.tokenize(sequences)
 
-        input_ids = torch.tensor(out["input_ids"], dtype=torch.int64)
+        input_ids = torch.tensor(out["input_ids"], dtype=torch.int32)
 
         with self.limiter:
             input_ids = input_ids.to(self.device)
 
-            subgraph, probabilities = self.model.predict_subgraph(input_ids, top_p)
+            terms = self.model.predict_bp_terms(input_ids, top_p)
 
-        return subgraph, probabilities
+        return terms
+
+    def predict_cc_terms(
+        self, sequences: list[str], top_p: float
+    ) -> list[dict[str, float]]:
+        """Predict the CC GO term probabilities for a given protein sequence."""
+
+        out = self.tokenize(sequences)
+
+        input_ids = torch.tensor(out["input_ids"], dtype=torch.int32)
+
+        with self.limiter:
+            input_ids = input_ids.to(self.device)
+
+            terms = self.model.predict_cc_terms(input_ids, top_p)
+
+        return terms
+
+    def predict_all_terms(
+        self, sequences: list[str], top_p: float
+    ) -> tuple[list[dict[str, float]], ...]:
+        """Predict all the GO term probabilities for a given protein sequence."""
+
+        out = self.tokenize(sequences)
+
+        input_ids = torch.tensor(out["input_ids"], dtype=torch.int32)
+
+        with self.limiter:
+            input_ids = input_ids.to(self.device)
+
+            mf_terms, bp_terms, cc_terms = self.model.predict_all_terms(
+                input_ids, top_p
+            )
+
+        return mf_terms, bp_terms, cc_terms
+
+    def predict_mf_subgraphs(
+        self, sequences: list[str], top_p: float
+    ) -> tuple[list[DiGraph], list[dict[str, float]]]:
+        """Predict the GO MF subgraphs for a given protein sequence."""
+
+        out = self.tokenize(sequences)
+
+        input_ids = torch.tensor(out["input_ids"], dtype=torch.int32)
+
+        with self.limiter:
+            input_ids = input_ids.to(self.device)
+
+            subgraphs, terms = self.model.predict_mf_subgraphs(input_ids, top_p)
+
+        return subgraphs, terms
+
+    def predict_bp_subgraphs(
+        self, sequences: list[str], top_p: float
+    ) -> tuple[list[DiGraph], list[dict[str, float]]]:
+        """Predict the GO BP subgraphs for a given protein sequence."""
+
+        out = self.tokenize(sequences)
+
+        input_ids = torch.tensor(out["input_ids"], dtype=torch.int32)
+
+        with self.limiter:
+            input_ids = input_ids.to(self.device)
+
+            subgraphs, terms = self.model.predict_bp_subgraphs(input_ids, top_p)
+
+        return subgraphs, terms
+
+    def predict_cc_subgraphs(
+        self, sequences: list[str], top_p: float
+    ) -> tuple[list[DiGraph], list[dict[str, float]]]:
+        """Predict the GO CC subgraphs for a given protein sequence."""
+
+        out = self.tokenize(sequences)
+
+        input_ids = torch.tensor(out["input_ids"], dtype=torch.int32)
+
+        with self.limiter:
+            input_ids = input_ids.to(self.device)
+
+            subgraphs, terms = self.model.predict_cc_subgraphs(input_ids, top_p)
+
+        return subgraphs, terms
+
+    def predict_all_subgraphs(
+        self, sequences: list[str], top_p: float
+    ) -> tuple[tuple[list[DiGraph], list[dict[str, float]]], ...]:
+        """Predict all the GO subgraphs for a given protein sequence."""
+
+        out = self.tokenize(sequences)
+
+        input_ids = torch.tensor(out["input_ids"], dtype=torch.int32)
+
+        with self.limiter:
+            input_ids = input_ids.to(self.device)
+
+            mf_results, bp_results, cc_results = self.model.predict_all_subgraphs(
+                input_ids, top_p
+            )
+
+        return mf_results, bp_results, cc_results

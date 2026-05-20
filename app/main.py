@@ -17,19 +17,18 @@ import uvicorn
 
 TITLE = "ESMC GO Inference Server"
 
-DESCRIPTION = (
-    "Server for protein gene ontology (GO) inference using the ESMC family of models."
-)
+DESCRIPTION = "Inference server for the ESMC Protein Function family of models."
 
-VERSION = "0.0.10"
+VERSION = "0.1.0"
 
 
 api_token = environ.get("API_TOKEN", "")
-model_name = environ.get("MODEL_NAME", "andrewdalpino/ESMC-300M-Protein-Function")
+model_name = environ.get("MODEL_NAME", "andrewdalpino/ESMC-Protein-Function-V1-300M")
 go_db_path = environ.get("GO_DB_PATH", "./dataset/go-basic.obo")
 context_length = int(environ.get("CONTEXT_LENGTH", 2048))
-device = environ.get("DEVICE", "cuda")
+device = environ.get("DEVICE", "cpu")
 quantize = environ.get("QUANTIZE", "true").lower() == "true"
+quant_group_size = int(environ.get("QUANT_GROUP_SIZE", 64))
 max_concurrency = int(environ.get("MAX_CONCURRENCY", "1"))
 
 
@@ -43,6 +42,7 @@ async def lifespan(app: FastAPI):
         context_length=context_length,
         device=device,
         quantize=quantize,
+        quant_group_size=quant_group_size,
         max_concurrency=max_concurrency,
     )
 
