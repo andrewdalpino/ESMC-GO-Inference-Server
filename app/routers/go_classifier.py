@@ -149,23 +149,23 @@ class PredictCcSubgraphsResponse(PredictSubgraphsResponse):
 
 class PredictAllSubgraphsResponse(BaseModel):
     mf_subgraphs: list[dict] = Field(
-        description="A list of subgraphs of the gene ontology in node-link format."
+        description="A list of subgraphs of the MF aspect of the gene ontology in node-link format."
+    )
+
+    bp_subgraphs: list[dict] = Field(
+        description="A list of subgraphs of the BP aspect of the gene ontology in node-link format."
+    )
+
+    cc_subgraphs: list[dict] = Field(
+        description="A list of subgraphs of the CC aspect of the gene ontology in node-link format."
     )
 
     mf_terms: list[dict[str, float]] = Field(
         description="List of MF GO terms and their probabilities."
     )
 
-    bp_subgraphs: list[dict] = Field(
-        description="A list of subgraphs of the gene ontology in node-link format."
-    )
-
     bp_terms: list[dict[str, float]] = Field(
         description="List of BP GO terms and their probabilities."
-    )
-
-    cc_subgraphs: list[dict] = Field(
-        description="A list of subgraphs of the gene ontology in node-link format."
     )
 
     cc_terms: list[dict[str, float]] = Field(
@@ -241,11 +241,9 @@ async def predict_mf_subgraphs(request: Request, input: PredictMfSubgraphsReques
         input.sequences, input.top_p
     )
 
-    subgraph_jsons = [
-        nx.node_link_data(subgraph, edges="edges") for subgraph in subgraphs
-    ]
+    subgraphs = [nx.node_link_data(subgraph, edges="edges") for subgraph in subgraphs]
 
-    return PredictMfSubgraphsResponse(subgraphs=subgraph_jsons, terms=terms)
+    return PredictMfSubgraphsResponse(subgraphs=subgraphs, terms=terms)
 
 
 @router.post(
@@ -258,9 +256,9 @@ async def predict_bp_subgraphs(request: Request, input: PredictBpSubgraphsReques
         input.sequences, input.top_p
     )
 
-    subgraph_jsons = [nx.node_link_data(subgraph) for subgraph in subgraphs]
+    subgraphs = [nx.node_link_data(subgraph, edges="edges") for subgraph in subgraphs]
 
-    return PredictBpSubgraphsResponse(subgraphs=subgraph_jsons, terms=terms)
+    return PredictBpSubgraphsResponse(subgraphs=subgraphs, terms=terms)
 
 
 @router.post(
@@ -273,9 +271,9 @@ async def predict_cc_subgraphs(request: Request, input: PredictCcSubgraphsReques
         input.sequences, input.top_p
     )
 
-    subgraph_jsons = [nx.node_link_data(subgraph) for subgraph in subgraphs]
+    subgraphs = [nx.node_link_data(subgraph, edges="edges") for subgraph in subgraphs]
 
-    return PredictCcSubgraphsResponse(subgraphs=subgraph_jsons, terms=terms)
+    return PredictCcSubgraphsResponse(subgraphs=subgraphs, terms=terms)
 
 
 @router.post(
@@ -292,14 +290,22 @@ async def predict_all_subgraphs(request: Request, input: PredictAllSubgraphsRequ
     bp_subgraphs, bp_terms = bp_results
     cc_subgraphs, cc_terms = cc_results
 
-    mf_subgraph_jsons = [nx.node_link_data(subgraph) for subgraph in mf_subgraphs]
-    bp_subgraph_jsons = [nx.node_link_data(subgraph) for subgraph in bp_subgraphs]
-    cc_subgraph_jsons = [nx.node_link_data(subgraph) for subgraph in cc_subgraphs]
+    mf_subgraphs = [
+        nx.node_link_data(subgraph, edges="edges") for subgraph in mf_subgraphs
+    ]
+
+    bp_subgraphs = [
+        nx.node_link_data(subgraph, edges="edges") for subgraph in bp_subgraphs
+    ]
+
+    cc_subgraphs = [
+        nx.node_link_data(subgraph, edges="edges") for subgraph in cc_subgraphs
+    ]
 
     return PredictAllSubgraphsResponse(
-        mf_subgraphs=mf_subgraph_jsons,
-        bp_subgraphs=bp_subgraph_jsons,
-        cc_subgraphs=cc_subgraph_jsons,
+        mf_subgraphs=mf_subgraphs,
+        bp_subgraphs=bp_subgraphs,
+        cc_subgraphs=cc_subgraphs,
         mf_terms=mf_terms,
         bp_terms=bp_terms,
         cc_terms=cc_terms,
