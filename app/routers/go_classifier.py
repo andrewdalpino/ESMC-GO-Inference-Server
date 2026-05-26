@@ -127,11 +127,7 @@ class PredictAllSubgraphsRequest(PredictSubgraphsRequest):
 
 class PredictSubgraphsResponse(BaseModel):
     subgraphs: list[dict] = Field(
-        description="A subgraph of the gene ontology in node-link format."
-    )
-
-    terms: list[dict[str, float]] = Field(
-        description="List of predicted GO terms and their probabilities."
+        description="A batch of subgraphs of the gene ontology in node-link format."
     )
 
 
@@ -149,27 +145,15 @@ class PredictCcSubgraphsResponse(PredictSubgraphsResponse):
 
 class PredictAllSubgraphsResponse(BaseModel):
     mf_subgraphs: list[dict] = Field(
-        description="A list of subgraphs of the MF aspect of the gene ontology in node-link format."
+        description="A batch of subgraphs of the MF aspect of the gene ontology in node-link format."
     )
 
     bp_subgraphs: list[dict] = Field(
-        description="A list of subgraphs of the BP aspect of the gene ontology in node-link format."
+        description="A batch of subgraphs of the BP aspect of the gene ontology in node-link format."
     )
 
     cc_subgraphs: list[dict] = Field(
-        description="A list of subgraphs of the CC aspect of the gene ontology in node-link format."
-    )
-
-    mf_terms: list[dict[str, float]] = Field(
-        description="List of MF GO terms and their probabilities."
-    )
-
-    bp_terms: list[dict[str, float]] = Field(
-        description="List of BP GO terms and their probabilities."
-    )
-
-    cc_terms: list[dict[str, float]] = Field(
-        description="List of CC GO terms and their probabilities."
+        description="A batch of subgraphs of the CC aspect of the gene ontology in node-link format."
     )
 
 
@@ -237,13 +221,13 @@ async def predict_all_terms(request: Request, input: PredictAllTermsRequest):
 async def predict_mf_subgraphs(request: Request, input: PredictMfSubgraphsRequest):
     """Return all the GO MF subgraphs for a protein sequence."""
 
-    subgraphs, terms = request.app.state.model.predict_mf_subgraphs(
+    subgraphs = request.app.state.model.predict_mf_subgraphs(
         input.sequences, input.top_p
     )
 
     subgraphs = [nx.node_link_data(subgraph, edges="edges") for subgraph in subgraphs]
 
-    return PredictMfSubgraphsResponse(subgraphs=subgraphs, terms=terms)
+    return PredictMfSubgraphsResponse(subgraphs=subgraphs)
 
 
 @router.post(
@@ -252,13 +236,13 @@ async def predict_mf_subgraphs(request: Request, input: PredictMfSubgraphsReques
 async def predict_bp_subgraphs(request: Request, input: PredictBpSubgraphsRequest):
     """Return all the GO BP subgraphs for a protein sequence."""
 
-    subgraphs, terms = request.app.state.model.predict_bp_subgraphs(
+    subgraphs = request.app.state.model.predict_bp_subgraphs(
         input.sequences, input.top_p
     )
 
     subgraphs = [nx.node_link_data(subgraph, edges="edges") for subgraph in subgraphs]
 
-    return PredictBpSubgraphsResponse(subgraphs=subgraphs, terms=terms)
+    return PredictBpSubgraphsResponse(subgraphs=subgraphs)
 
 
 @router.post(
@@ -267,13 +251,13 @@ async def predict_bp_subgraphs(request: Request, input: PredictBpSubgraphsReques
 async def predict_cc_subgraphs(request: Request, input: PredictCcSubgraphsRequest):
     """Return all the GO CC subgraphs for a protein sequence."""
 
-    subgraphs, terms = request.app.state.model.predict_cc_subgraphs(
+    subgraphs = request.app.state.model.predict_cc_subgraphs(
         input.sequences, input.top_p
     )
 
     subgraphs = [nx.node_link_data(subgraph, edges="edges") for subgraph in subgraphs]
 
-    return PredictCcSubgraphsResponse(subgraphs=subgraphs, terms=terms)
+    return PredictCcSubgraphsResponse(subgraphs=subgraphs)
 
 
 @router.post(
@@ -282,13 +266,9 @@ async def predict_cc_subgraphs(request: Request, input: PredictCcSubgraphsReques
 async def predict_all_subgraphs(request: Request, input: PredictAllSubgraphsRequest):
     """Return all the GO subgraphs for a protein sequence."""
 
-    mf_results, bp_results, cc_results = request.app.state.model.predict_all_subgraphs(
+    mf_subgraphs, bp_subgraphs, cc_subgraphs = request.app.state.model.predict_all_subgraphs(
         input.sequences, input.top_p
     )
-
-    mf_subgraphs, mf_terms = mf_results
-    bp_subgraphs, bp_terms = bp_results
-    cc_subgraphs, cc_terms = cc_results
 
     mf_subgraphs = [
         nx.node_link_data(subgraph, edges="edges") for subgraph in mf_subgraphs
@@ -306,7 +286,4 @@ async def predict_all_subgraphs(request: Request, input: PredictAllSubgraphsRequ
         mf_subgraphs=mf_subgraphs,
         bp_subgraphs=bp_subgraphs,
         cc_subgraphs=cc_subgraphs,
-        mf_terms=mf_terms,
-        bp_terms=bp_terms,
-        cc_terms=cc_terms,
     )

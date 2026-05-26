@@ -169,7 +169,7 @@ class GoTermClassifier:
 
     def predict_mf_subgraphs(
         self, sequences: list[str], top_p: float
-    ) -> tuple[list[DiGraph], list[dict[str, float]]]:
+    ) -> list[DiGraph]:
         """Predict the GO MF subgraphs for a given protein sequence."""
 
         out = self.tokenize(sequences)
@@ -179,13 +179,13 @@ class GoTermClassifier:
         with self.limiter:
             input_ids = input_ids.to(self.device)
 
-            subgraphs, terms = self.model.predict_mf_subgraphs(input_ids, top_p)
+            subgraphs = self.model.predict_mf_subgraphs(input_ids, top_p)
 
-        return subgraphs, terms
+        return subgraphs
 
     def predict_bp_subgraphs(
         self, sequences: list[str], top_p: float
-    ) -> tuple[list[DiGraph], list[dict[str, float]]]:
+    ) -> list[DiGraph]:
         """Predict the GO BP subgraphs for a given protein sequence."""
 
         out = self.tokenize(sequences)
@@ -195,13 +195,13 @@ class GoTermClassifier:
         with self.limiter:
             input_ids = input_ids.to(self.device)
 
-            subgraphs, terms = self.model.predict_bp_subgraphs(input_ids, top_p)
+            subgraphs = self.model.predict_bp_subgraphs(input_ids, top_p)
 
-        return subgraphs, terms
+        return subgraphs
 
     def predict_cc_subgraphs(
         self, sequences: list[str], top_p: float
-    ) -> tuple[list[DiGraph], list[dict[str, float]]]:
+    ) -> list[DiGraph]:
         """Predict the GO CC subgraphs for a given protein sequence."""
 
         out = self.tokenize(sequences)
@@ -211,13 +211,13 @@ class GoTermClassifier:
         with self.limiter:
             input_ids = input_ids.to(self.device)
 
-            subgraphs, terms = self.model.predict_cc_subgraphs(input_ids, top_p)
+            subgraphs = self.model.predict_cc_subgraphs(input_ids, top_p)
 
-        return subgraphs, terms
+        return subgraphs
 
     def predict_all_subgraphs(
         self, sequences: list[str], top_p: float
-    ) -> tuple[tuple[list[DiGraph], list[dict[str, float]]], ...]:
+    ) -> tuple[list[DiGraph], list[DiGraph], list[DiGraph]]:
         """Predict all the GO subgraphs for a given protein sequence."""
 
         out = self.tokenize(sequences)
@@ -227,8 +227,8 @@ class GoTermClassifier:
         with self.limiter:
             input_ids = input_ids.to(self.device)
 
-            mf_results, bp_results, cc_results = self.model.predict_all_subgraphs(
+            mf_subgraphs, bp_subgraphs, cc_subgraphs = self.model.predict_all_subgraphs(
                 input_ids, top_p
             )
 
-        return mf_results, bp_results, cc_results
+        return mf_subgraphs, bp_subgraphs, cc_subgraphs
