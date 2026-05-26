@@ -1,304 +1,471 @@
 import unittest
-from unittest.mock import patch, MagicMock, Mock
-import torch
-import networkx as nx
-import sys
-import os
+from unittest.mock import MagicMock, PropertyMock, patch, call
 
-# Add the app directory to the path so we can import the model module
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+import torch
+from networkx import DiGraph
 
 from app.model import GoTermClassifier
 
 
-class TestGoTermClassifier(unittest.TestCase):
-
+class TestGoTermClassifierConstructor(unittest.TestCase):
     def setUp(self):
-        """Set up test fixtures before each test method."""
-        # Create a mock DiGraph for testing
-        self.mock_graph = nx.DiGraph()
-        self.mock_graph.add_node("GO:0000001", name="test term 1")
-        self.mock_graph.add_node("GO:0000002", name="test term 2")
-        self.mock_graph.add_edge("GO:0000001", "GO:0000002")
+        self.mock_model = MagicMock()
+        self.mock_model.to.return_value = self.mock_model
+        self.mock_model.tokenizer = MagicMock()
 
-        # Mock model parameters
-        self.model_name = "andrewdalpino/ESMC-300M-Protein-Function"
-        self.context_length = 1024
-        self.quantize = False
-        self.quant_group_size = 192
-        self.device = "cpu"
+        self.graph = DiGraph()
 
-        # Sample protein sequence for testing
-        self.test_sequence = "MAEGEITTFTALTEKFNLPPGNYKKPKLLYCSNGGHFLRILPDGTVDGTRDRSDQHIQLQLSAESVGEVYIKSTETGQYLAMDTSGLLYGSQTPNEECLFLERLEENHYNTYTSKKHAEKNWFVGLKKNGSCKRGPRTHYGQKAILFLPLPV"
+    def test_invalid_model_name_raises_value_error(self):
+        with (
+            patch("app.model.ESMCProteinFunction.from_pretrained"),
+            patch("app.model.Semaphore"),
+        ):
+            with self.assertRaises(ValueError) as ctx:
+                GoTermClassifier(
+                    name="invalid/model",
+                    graph=self.graph,
+                    context_length=128,
+                    device="cpu",
+                    quantize=False,
+                    quant_group_size=64,
+                    max_concurrency=1,
+                )
 
-    @patch("app.model.EsmcGoTermClassifier")
-    @patch("app.model.EsmSequenceTokenizer")
-    @patch("app.model.torch")
-    @patch("app.model.cuda_is_available")
-    @patch("app.model.is_bf16_supported")
-    def test_init_successful(
-        self, mock_bf16, mock_cuda, mock_torch, mock_tokenizer_class, mock_model_class
-    ):
-        """Test successful initialization of GoTermClassifier."""
-        # Configure mocks
-        mock_cuda.return_value = True
-        mock_bf16.return_value = True
-        mock_model = MagicMock()
-        mock_model_class.from_pretrained.return_value = mock_model
-        mock_tokenizer = MagicMock()
-        mock_tokenizer_class.return_value = mock_tokenizer
-        mock_torch.compile.return_value = mock_model
+        self.assertIn("invalid/model", str(ctx.exception))
 
-        # Initialize classifier
+    def test_context_length_zero_raises_value_error(self):
+        with (
+            patch("app.model.ESMCProteinFunction.from_pretrained"),
+            patch("app.model.Semaphore"),
+        ):
+            with self.assertRaises(ValueError) as ctx:
+                GoTermClassifier(
+                    name="andrewdalpino/ESMC-Protein-Function-V1-300M",
+                    graph=self.graph,
+                    context_length=0,
+                    device="cpu",
+                    quantize=False,
+                    quant_group_size=64,
+                    max_concurrency=1,
+                )
+
+        self.assertIn("Context length", str(ctx.exception))
+
+    def test_context_length_negative_raises_value_error(self):
+        with (
+            patch("app.model.ESMCProteinFunction.from_pretrained"),
+            patch("app.model.Semaphore"),
+        ):
+            with self.assertRaises(ValueError) as ctx:
+                GoTermClassifier(
+                    name="andrewdalpino/ESMC-Protein-Function-V1-300M",
+                    graph=self.graph,
+                    context_length=-10,
+                    device="cpu",
+                    quantize=False,
+                    quant_group_size=64,
+                    max_concurrency=1,
+                )
+
+        self.assertIn("Context length", str(ctx.exception))
+
+    @patch("app.model.cuda_is_available", return_value=False)
+    def test_cuda_device_when_not_available_raises_value_error(self, _mock_cuda):
+        with (
+            patch("app.model.ESMCProteinFunction.from_pretrained"),
+            patch("app.model.Semaphore"),
+        ):
+            with self.assertRaises(ValueError) as ctx:
+                GoTermClassifier(
+                    name="andrewdalpino/ESMC-Protein-Function-V1-300M",
+                    graph=self.graph,
+                    context_length=128,
+                    device="cuda",
+                    quantize=False,
+                    quant_group_size=64,
+                    max_concurrency=1,
+                )
+
+        self.assertIn("CUDA", str(ctx.exception))
+
+    @patch("app.model.mps_is_available", return_value=False)
+    def test_mps_device_when_not_available_raises_value_error(self, _mock_mps):
+        with (
+            patch("app.model.ESMCProteinFunction.from_pretrained"),
+            patch("app.model.Semaphore"),
+        ):
+            with self.assertRaises(ValueError) as ctx:
+                GoTermClassifier(
+                    name="andrewdalpino/ESMC-Protein-Function-V1-300M",
+                    graph=self.graph,
+                    context_length=128,
+                    device="mps",
+                    quantize=False,
+                    quant_group_size=64,
+                    max_concurrency=1,
+                )
+
+        self.assertIn("MPS", str(ctx.exception))
+
+    def test_max_concurrency_zero_raises_value_error(self):
+        with (
+            patch("app.model.ESMCProteinFunction.from_pretrained"),
+            patch("app.model.Semaphore"),
+        ):
+            with self.assertRaises(ValueError) as ctx:
+                GoTermClassifier(
+                    name="andrewdalpino/ESMC-Protein-Function-V1-300M",
+                    graph=self.graph,
+                    context_length=128,
+                    device="cpu",
+                    quantize=False,
+                    quant_group_size=64,
+                    max_concurrency=0,
+                )
+
+        self.assertIn("Max concurrency", str(ctx.exception))
+
+    def test_max_concurrency_negative_raises_value_error(self):
+        with (
+            patch("app.model.ESMCProteinFunction.from_pretrained"),
+            patch("app.model.Semaphore"),
+        ):
+            with self.assertRaises(ValueError) as ctx:
+                GoTermClassifier(
+                    name="andrewdalpino/ESMC-Protein-Function-V1-300M",
+                    graph=self.graph,
+                    context_length=128,
+                    device="cpu",
+                    quantize=False,
+                    quant_group_size=64,
+                    max_concurrency=-1,
+                )
+
+        self.assertIn("Max concurrency", str(ctx.exception))
+
+    @patch("app.model.Semaphore")
+    def test_happy_path_no_quantize_cpu(self, mock_semaphore):
+        mock_from_pretrained = patch(
+            "app.model.ESMCProteinFunction.from_pretrained",
+            return_value=self.mock_model,
+        )
+        mock_from_pretrained.start()
+        self.addCleanup(mock_from_pretrained.stop)
+
         classifier = GoTermClassifier(
-            name=self.model_name,
-            graph=self.mock_graph,
-            context_length=self.context_length,
-            quantize=self.quantize,
-            quant_group_size=self.quant_group_size,
-            device=self.device,
+            name="andrewdalpino/ESMC-Protein-Function-V1-300M",
+            graph=self.graph,
+            context_length=128,
+            device="cpu",
+            quantize=False,
+            quant_group_size=64,
+            max_concurrency=2,
         )
 
-        # Verify correct initialization
-        self.assertEqual(classifier.tokenizer, mock_tokenizer)
-        self.assertEqual(classifier.model, mock_model)
-        self.assertEqual(classifier.context_length, self.context_length)
-        self.assertEqual(classifier.device, self.device)
+        self.assertEqual(classifier.name, "andrewdalpino/ESMC-Protein-Function-V1-300M")
+        self.assertEqual(classifier.context_length, 128)
+        self.assertEqual(classifier.device, "cpu")
+        self.assertFalse(classifier.quantize)
+        self.assertEqual(classifier.quant_group_size, 64)
+        self.assertEqual(classifier.max_concurrency, 2)
+        self.assertEqual(classifier.model, self.mock_model)
 
-        # Verify method calls
-        mock_model_class.from_pretrained.assert_called_once_with(self.model_name)
-        mock_model.to.assert_called_once()
-        mock_model.load_gene_ontology.assert_called_once_with(self.mock_graph)
-        mock_model.eval.assert_called_once()
+        mock_semaphore.assert_called_once_with(2)
+        self.assertEqual(classifier.limiter, mock_semaphore.return_value)
 
-        # Verify quantize not called since quantize=False
-        mock_model.quantize_weights.assert_not_called()
+        self.mock_model.to.assert_has_calls([
+            call(dtype=torch.float16),
+            call("cpu"),
+        ])
+        self.mock_model.load_gene_ontology.assert_called_once_with(self.graph)
+        self.mock_model.eval.assert_called_once()
 
-    @patch("app.model.EsmcGoTermClassifier")
-    @patch("app.model.EsmSequenceTokenizer")
-    @patch("app.model.torch")
-    @patch("app.model.cuda_is_available")
-    @patch("app.model.is_bf16_supported")
-    def test_init_with_quantization(
-        self, mock_bf16, mock_cuda, mock_torch, mock_tokenizer_class, mock_model_class
+    @patch("app.model.Semaphore")
+    @patch("app.model.cuda_is_available", return_value=True)
+    @patch("app.model.is_bf16_supported", return_value=True)
+    def test_happy_path_no_quantize_cuda_bf16(
+        self, _mock_bf16, _mock_cuda, mock_semaphore
     ):
-        """Test initialization with quantization enabled."""
-        # Configure mocks
-        mock_cuda.return_value = True
-        mock_bf16.return_value = True
-        mock_model = MagicMock()
-        mock_model_class.from_pretrained.return_value = mock_model
-        mock_tokenizer = MagicMock()
-        mock_tokenizer_class.return_value = mock_tokenizer
-        mock_torch.compile.return_value = mock_model
+        mock_from_pretrained = patch(
+            "app.model.ESMCProteinFunction.from_pretrained",
+            return_value=self.mock_model,
+        )
+        mock_from_pretrained.start()
+        self.addCleanup(mock_from_pretrained.stop)
 
-        # Initialize classifier with quantization
         classifier = GoTermClassifier(
-            name=self.model_name,
-            graph=self.mock_graph,
-            context_length=self.context_length,
+            name="andrewdalpino/ESMC-Protein-Function-V1-300M",
+            graph=self.graph,
+            context_length=128,
+            device="cuda",
+            quantize=False,
+            quant_group_size=64,
+            max_concurrency=1,
+        )
+
+        self.assertEqual(classifier.device, "cuda")
+
+        self.mock_model.to.assert_has_calls([
+            call(dtype=torch.bfloat16),
+            call("cuda"),
+        ])
+
+    @patch("app.model.Semaphore")
+    @patch("app.model.cuda_is_available", return_value=True)
+    @patch("app.model.is_bf16_supported", return_value=False)
+    def test_happy_path_no_quantize_cuda_float16(
+        self, _mock_bf16, _mock_cuda, mock_semaphore
+    ):
+        mock_from_pretrained = patch(
+            "app.model.ESMCProteinFunction.from_pretrained",
+            return_value=self.mock_model,
+        )
+        mock_from_pretrained.start()
+        self.addCleanup(mock_from_pretrained.stop)
+
+        GoTermClassifier(
+            name="andrewdalpino/ESMC-Protein-Function-V1-300M",
+            graph=self.graph,
+            context_length=128,
+            device="cuda",
+            quantize=False,
+            quant_group_size=64,
+            max_concurrency=1,
+        )
+
+        self.mock_model.to.assert_has_calls([
+            call(dtype=torch.float16),
+            call("cuda"),
+        ])
+
+    @patch("app.model.Semaphore")
+    def test_happy_path_quantize(self, mock_semaphore):
+        mock_from_pretrained = patch(
+            "app.model.ESMCProteinFunction.from_pretrained",
+            return_value=self.mock_model,
+        )
+        mock_from_pretrained.start()
+        self.addCleanup(mock_from_pretrained.stop)
+
+        classifier = GoTermClassifier(
+            name="andrewdalpino/ESMC-Protein-Function-V1-300M",
+            graph=self.graph,
+            context_length=128,
+            device="cpu",
             quantize=True,
-            quant_group_size=self.quant_group_size,
-            device=self.device,
+            quant_group_size=32,
+            max_concurrency=1,
         )
 
-        # Verify quantize called with correct parameters
-        mock_model.quantize_weights.assert_called_once_with(
-            group_size=self.quant_group_size
-        )
+        self.assertTrue(classifier.quantize)
+        self.assertEqual(classifier.quant_group_size, 32)
 
-    @patch("app.model.EsmcGoTermClassifier")
-    @patch("app.model.EsmSequenceTokenizer")
-    @patch("app.model.torch")
-    @patch("app.model.cuda_is_available")
-    def test_init_invalid_model(
-        self, mock_cuda, mock_torch, mock_tokenizer_class, mock_model_class
-    ):
-        """Test initialization with invalid model name."""
-        mock_cuda.return_value = True
+        self.mock_model.quantize_weights.assert_called_once_with(32)
+        self.mock_model.to.assert_called_once_with("cpu")
+        self.mock_model.load_gene_ontology.assert_called_once_with(self.graph)
+        self.mock_model.eval.assert_called_once()
 
-        # Test with invalid model name
-        with self.assertRaises(ValueError) as context:
-            GoTermClassifier(
-                name="invalid_model_name",
-                graph=self.mock_graph,
-                context_length=self.context_length,
-                quantize=self.quantize,
-                quant_group_size=self.quant_group_size,
-                device=self.device,
+    def test_happy_path_tokenizer_partial(self):
+        mock_tokenizer = MagicMock(return_value={"input_ids": [[1, 2, 3]]})
+        self.mock_model.tokenizer = mock_tokenizer
+
+        with (
+            patch(
+                "app.model.ESMCProteinFunction.from_pretrained",
+                return_value=self.mock_model,
+            ),
+            patch("app.model.Semaphore"),
+        ):
+            classifier = GoTermClassifier(
+                name="andrewdalpino/ESMC-Protein-Function-V1-300M",
+                graph=self.graph,
+                context_length=128,
+                device="cpu",
+                quantize=False,
+                quant_group_size=64,
+                max_concurrency=1,
             )
 
-        self.assertIn(
-            "Model invalid_model_name is not available", str(context.exception)
-        )
+        result = classifier.tokenize(["MKLL"])
 
-    @patch("app.model.EsmcGoTermClassifier")
-    @patch("app.model.EsmSequenceTokenizer")
-    @patch("app.model.torch")
-    @patch("app.model.cuda_is_available")
-    def test_init_invalid_context_length(
-        self, mock_cuda, mock_torch, mock_tokenizer_class, mock_model_class
-    ):
-        """Test initialization with invalid context length."""
-        mock_cuda.return_value = True
-
-        # Test with invalid context length
-        with self.assertRaises(ValueError) as context:
-            GoTermClassifier(
-                name=self.model_name,
-                graph=self.mock_graph,
-                context_length=0,
-                quantize=self.quantize,
-                quant_group_size=self.quant_group_size,
-                device=self.device,
-            )
-
-        self.assertIn("Context length must be greater than 0", str(context.exception))
-
-    @patch("app.model.EsmcGoTermClassifier")
-    @patch("app.model.EsmSequenceTokenizer")
-    @patch("app.model.torch")
-    @patch("app.model.cuda_is_available")
-    def test_init_cuda_not_available(
-        self, mock_cuda, mock_torch, mock_tokenizer_class, mock_model_class
-    ):
-        """Test initialization with CUDA requested but not available."""
-        mock_cuda.return_value = False
-
-        # Test with CUDA requested but not available
-        with self.assertRaises(ValueError) as context:
-            GoTermClassifier(
-                name=self.model_name,
-                graph=self.mock_graph,
-                context_length=self.context_length,
-                quantize=self.quantize,
-                quant_group_size=self.quant_group_size,
-                device="cuda",
-            )
-
-        self.assertIn("CUDA is not supported on this device", str(context.exception))
-
-    @patch("app.model.EsmcGoTermClassifier")
-    @patch("app.model.EsmSequenceTokenizer")
-    @patch("app.model.torch")
-    @patch("app.model.cuda_is_available")
-    @patch("app.model.is_bf16_supported")
-    def test_predict_terms(
-        self, mock_bf16, mock_cuda, mock_torch, mock_tokenizer_class, mock_model_class
-    ):
-        """Test predict_terms method."""
-        # Configure mocks
-        mock_cuda.return_value = True
-        mock_bf16.return_value = True
-        mock_model = MagicMock()
-        mock_model_class.from_pretrained.return_value = mock_model
-        mock_tokenizer = MagicMock()
-        mock_tokenizer_class.return_value = mock_tokenizer
-        mock_torch.compile.return_value = mock_model
-
-        # Mock tokenizer output
-        mock_tokenizer.return_value = {"input_ids": [1, 2, 3, 4, 5]}
-
-        # Mock model predict_terms output
-        expected_probabilities = {
-            "GO:0000001": 0.9,
-            "GO:0000002": 0.8,
-        }
-        mock_model.predict_terms.return_value = expected_probabilities
-
-        # Initialize classifier
-        classifier = GoTermClassifier(
-            name=self.model_name,
-            graph=self.mock_graph,
-            context_length=self.context_length,
-            quantize=self.quantize,
-            quant_group_size=self.quant_group_size,
-            device=self.device,
-        )
-
-        # Test predict_terms
-        result = classifier.predict_terms(self.test_sequence, top_p=0.5)
-
-        # Verify result
-        self.assertEqual(result, expected_probabilities)
-
-        # Verify tokenizer was called correctly
         mock_tokenizer.assert_called_once_with(
-            self.test_sequence,
-            max_length=self.context_length,
-            truncation=True,
+            ["MKLL"], max_length=128, padding=True, truncation=True
         )
+        self.assertEqual(result, {"input_ids": [[1, 2, 3]]})
 
-        # Verify model predict_terms was called correctly
-        mock_model.predict_terms.assert_called_once()
 
-    @patch("app.model.EsmcGoTermClassifier")
-    @patch("app.model.EsmSequenceTokenizer")
-    @patch("app.model.torch")
-    @patch("app.model.cuda_is_available")
-    @patch("app.model.is_bf16_supported")
-    def test_predict_subgraph(
-        self, mock_bf16, mock_cuda, mock_torch, mock_tokenizer_class, mock_model_class
-    ):
-        """Test predict_subgraph method."""
-        # Configure mocks
-        mock_cuda.return_value = True
-        mock_bf16.return_value = True
+class TestGoTermClassifierProperty(unittest.TestCase):
+    def test_num_parameters_delegates_to_model(self):
         mock_model = MagicMock()
-        mock_model_class.from_pretrained.return_value = mock_model
-        mock_tokenizer = MagicMock()
-        mock_tokenizer_class.return_value = mock_tokenizer
-        mock_torch.compile.return_value = mock_model
+        mock_model.to.return_value = mock_model
+        type(mock_model).num_params = PropertyMock(return_value=300_000_000)
 
-        # Mock tokenizer output
-        mock_tokenizer.return_value = {"input_ids": [1, 2, 3, 4, 5]}
+        with (
+            patch(
+                "app.model.ESMCProteinFunction.from_pretrained",
+                return_value=mock_model,
+            ),
+            patch("app.model.Semaphore"),
+        ):
+            classifier = GoTermClassifier(
+                name="andrewdalpino/ESMC-Protein-Function-V1-300M",
+                graph=DiGraph(),
+                context_length=128,
+                device="cpu",
+                quantize=False,
+                quant_group_size=64,
+                max_concurrency=1,
+            )
 
-        # Create a mock subgraph and probabilities
-        mock_subgraph = nx.DiGraph()
-        mock_subgraph.add_node("GO:0000001", name="test term 1")
-        mock_subgraph.add_node("GO:0000002", name="test term 2")
-        mock_subgraph.add_edge("GO:0000001", "GO:0000002")
+        self.assertEqual(classifier.num_parameters, 300_000_000)
 
-        expected_probabilities = {
-            "GO:0000001": 0.9,
-            "GO:0000002": 0.8,
-        }
 
-        # Mock model predict_subgraph output
-        mock_model.predict_subgraph.return_value = (
-            mock_subgraph,
-            expected_probabilities,
+class TestGoTermClassifierPrediction(unittest.TestCase):
+    def setUp(self):
+        self.mock_model = MagicMock()
+        self.mock_model.to.return_value = self.mock_model
+        self.mock_model.tokenizer = MagicMock(
+            return_value={"input_ids": [[1, 2, 3]]}
         )
 
-        # Initialize classifier
-        classifier = GoTermClassifier(
-            name=self.model_name,
-            graph=self.mock_graph,
-            context_length=self.context_length,
-            quantize=self.quantize,
-            quant_group_size=self.quant_group_size,
-            device=self.device,
+        self.mock_tensor = MagicMock()
+        self.mock_tensor_dev = MagicMock()
+        self.mock_tensor.to.return_value = self.mock_tensor_dev
+
+        self.mock_semaphore = MagicMock()
+
+        self.patchers = [
+            patch(
+                "app.model.ESMCProteinFunction.from_pretrained",
+                return_value=self.mock_model,
+            ),
+            patch("app.model.Semaphore", return_value=self.mock_semaphore),
+            patch("app.model.torch.tensor", return_value=self.mock_tensor),
+        ]
+        for p in self.patchers:
+            p.start()
+
+        self.classifier = GoTermClassifier(
+            name="andrewdalpino/ESMC-Protein-Function-V1-300M",
+            graph=DiGraph(),
+            context_length=128,
+            device="cpu",
+            quantize=False,
+            quant_group_size=64,
+            max_concurrency=1,
         )
 
-        # Test predict_subgraph
-        result_subgraph, result_probabilities = classifier.predict_subgraph(
-            self.test_sequence, top_p=0.5
+    def tearDown(self):
+        for p in reversed(self.patchers):
+            p.stop()
+
+    def test_predict_mf_terms(self):
+        expected = [{"GO:0001": 0.95}]
+        self.mock_model.predict_mf_terms.return_value = expected
+
+        result = self.classifier.predict_mf_terms(["MKLL"], top_p=0.5)
+
+        self.mock_model.tokenizer.assert_called_once_with(
+            ["MKLL"], max_length=128, padding=True, truncation=True
+        )
+        self.mock_tensor.to.assert_called_once_with("cpu")
+        self.mock_model.predict_mf_terms.assert_called_once_with(
+            self.mock_tensor_dev, 0.5
+        )
+        self.assertEqual(result, expected)
+
+    def test_predict_bp_terms(self):
+        expected = [{"GO:0002": 0.87}]
+        self.mock_model.predict_bp_terms.return_value = expected
+
+        result = self.classifier.predict_bp_terms(["MKLL"], top_p=0.3)
+
+        self.mock_model.tokenizer.assert_called_once()
+        self.mock_model.predict_bp_terms.assert_called_once_with(
+            self.mock_tensor_dev, 0.3
+        )
+        self.assertEqual(result, expected)
+
+    def test_predict_cc_terms(self):
+        expected = [{"GO:0003": 0.76}]
+        self.mock_model.predict_cc_terms.return_value = expected
+
+        result = self.classifier.predict_cc_terms(["MKLL"], top_p=0.9)
+
+        self.mock_model.tokenizer.assert_called_once()
+        self.mock_model.predict_cc_terms.assert_called_once_with(
+            self.mock_tensor_dev, 0.9
+        )
+        self.assertEqual(result, expected)
+
+    def test_predict_all_terms(self):
+        expected_mf = [{"GO:0001": 0.95}]
+        expected_bp = [{"GO:0002": 0.87}]
+        expected_cc = [{"GO:0003": 0.76}]
+        self.mock_model.predict_all_terms.return_value = (
+            expected_mf, expected_bp, expected_cc
         )
 
-        # Verify result
-        self.assertEqual(result_subgraph, mock_subgraph)
-        self.assertEqual(result_probabilities, expected_probabilities)
+        mf, bp, cc = self.classifier.predict_all_terms(["MKLL"], top_p=0.5)
 
-        # Verify tokenizer was called correctly
-        mock_tokenizer.assert_called_once_with(
-            self.test_sequence,
-            max_length=self.context_length,
-            truncation=True,
+        self.mock_model.tokenizer.assert_called_once()
+        self.mock_model.predict_all_terms.assert_called_once_with(
+            self.mock_tensor_dev, 0.5
+        )
+        self.assertEqual(mf, expected_mf)
+        self.assertEqual(bp, expected_bp)
+        self.assertEqual(cc, expected_cc)
+
+    def test_predict_mf_subgraphs(self):
+        expected = [MagicMock(spec=DiGraph)]
+        self.mock_model.predict_mf_subgraphs.return_value = expected
+
+        result = self.classifier.predict_mf_subgraphs(["MKLL"], top_p=0.5)
+
+        self.mock_model.tokenizer.assert_called_once()
+        self.mock_model.predict_mf_subgraphs.assert_called_once_with(
+            self.mock_tensor_dev, 0.5
+        )
+        self.assertEqual(result, expected)
+
+    def test_predict_bp_subgraphs(self):
+        expected = [MagicMock(spec=DiGraph)]
+        self.mock_model.predict_bp_subgraphs.return_value = expected
+
+        result = self.classifier.predict_bp_subgraphs(["MKLL"], top_p=0.5)
+
+        self.mock_model.tokenizer.assert_called_once()
+        self.mock_model.predict_bp_subgraphs.assert_called_once_with(
+            self.mock_tensor_dev, 0.5
+        )
+        self.assertEqual(result, expected)
+
+    def test_predict_cc_subgraphs(self):
+        expected = [MagicMock(spec=DiGraph)]
+        self.mock_model.predict_cc_subgraphs.return_value = expected
+
+        result = self.classifier.predict_cc_subgraphs(["MKLL"], top_p=0.5)
+
+        self.mock_model.tokenizer.assert_called_once()
+        self.mock_model.predict_cc_subgraphs.assert_called_once_with(
+            self.mock_tensor_dev, 0.5
+        )
+        self.assertEqual(result, expected)
+
+    def test_predict_all_subgraphs(self):
+        expected_mf = [MagicMock(spec=DiGraph)]
+        expected_bp = [MagicMock(spec=DiGraph)]
+        expected_cc = [MagicMock(spec=DiGraph)]
+        self.mock_model.predict_all_subgraphs.return_value = (
+            expected_mf, expected_bp, expected_cc
         )
 
-        # Verify model predict_subgraph was called correctly
-        mock_model.predict_subgraph.assert_called_once()
+        mf, bp, cc = self.classifier.predict_all_subgraphs(["MKLL"], top_p=0.5)
 
-
-if __name__ == "__main__":
-    unittest.main()
+        self.mock_model.tokenizer.assert_called_once()
+        self.mock_model.predict_all_subgraphs.assert_called_once_with(
+            self.mock_tensor_dev, 0.5
+        )
+        self.assertEqual(mf, expected_mf)
+        self.assertEqual(bp, expected_bp)
+        self.assertEqual(cc, expected_cc)
